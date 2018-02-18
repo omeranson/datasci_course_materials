@@ -1,6 +1,17 @@
 import json
 
-class MapReduce:
+class FunctionWrapper(object):
+    def __init__(self, mapper, reducer):
+        self._mapper = mapper
+        self._reducer = reducer
+
+    def mapper(self, mr, record):
+        self._mapper(mr, record)
+
+    def reducer(self, mr, key, iterator):
+        self._reducer(mr, key, iterator)
+
+class MapReduceBase(object):
     def __init__(self):
         self.intermediate = {}
         self.result = []
@@ -12,13 +23,17 @@ class MapReduce:
     def emit(self, value):
         self.result.append(value) 
 
-    def execute(self, data, mapper, reducer):
-        for line in data:
-            record = json.loads(line)
-            mapper(record)
-
+    def execute(self, data, impl):
+        for record in data:
+            impl.mapper(self, record)
         for key in self.intermediate:
-            reducer(key, self.intermediate[key])
+            impl.reducer(self, key, self.intermediate[key])
+
+
+class MapReduce(MapReduceBase):
+    def execute(self, data, impl):
+        jsonned_data = (json.loads(line) for line in data)
+        super(MapReduce, self).execute(jsonned_data, impl)
 
         #jenc = json.JSONEncoder(encoding='latin-1')
         jenc = json.JSONEncoder()

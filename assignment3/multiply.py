@@ -1,12 +1,13 @@
 import collections
-import MapReduce
+import json
 import sys
+
+import join
+import MapReduce
 
 """
 Matrix Multiplication
 """
-
-mr = MapReduce.MapReduce()
 
 # =============================
 # Do not modify above this line
@@ -14,29 +15,18 @@ mr = MapReduce.MapReduce()
 def sizeof(matrix):
     return (5,5)  # Both matrices are 5 x 5.
 
-def mapper(record):
+def mapper(mr, record):
+    # record: 'a', idx1, idx2, value_a, 'b', idx2, idx3, value_b
+    # return: key: idx1,idx3, value: value_a * value_b
+    #
     # key: document identifier
     # value: document contents
-    matrix, idx1, idx2, value = tuple(record)
-    size = sizeof('a')[1]
-    if matrix == 'a':
-        for k in range(size):
-            mr.emit_intermediate((idx1, k), record)
-    elif matrix == 'b':
-        for k in range(size):
-            mr.emit_intermediate((k, idx2), record)
+    value = record[3]*record[7]
+    key = (record[1], record[6])
+    mr.emit_intermediate(key, value)
 
-def reducer(key, list_of_values):
-    running_count = sizeof('a')[1]
-    a = [0] * running_count
-    b = [0] * running_count
-    for record in list_of_values:
-        matrix, idx1, idx2, value = tuple(record)
-        if matrix == 'a':
-            a[idx2] = value
-        elif matrix == 'b':
-            b[idx1] = value
-    cell_value = sum((e_a*e_b for e_a, e_b in zip(a,b)))
+def reducer(mr, key, list_of_values):
+    cell_value = sum(list_of_values)
     idx1, idx2 = key
     mr.emit((idx1, idx2, cell_value))
 
@@ -44,4 +34,17 @@ def reducer(key, list_of_values):
 # =============================
 if __name__ == '__main__':
   inputdata = open(sys.argv[1])
-  mr.execute(inputdata, mapper, reducer)
+  jsonned_inputdata = (json.loads(line) for line in inputdata)
+  class Join2(join.Join):
+    def join_params(self):
+        return (('a', 'b'), ((2,),(1,)))
+
+  j = Join2()
+  mr0 = MapReduce.MapReduceBase()
+  mr0.execute(jsonned_inputdata, j)
+  wrapper = MapReduce.FunctionWrapper(mapper, reducer)
+  mr1 = MapReduce.MapReduceBase()
+  mr1.execute(mr0.result, wrapper)
+  jenc = json.JSONEncoder()
+  for item in mr1.result:
+      print jenc.encode(item)
